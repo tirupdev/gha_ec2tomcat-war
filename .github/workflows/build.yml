@@ -1,4 +1,4 @@
-name: Build WAR Package and Deploy to EC2 Tomcat
+name: Build WAR Package and Deploy to Tomcat on EC2
 
 on:
   push:
@@ -11,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Set up Java environment
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
@@ -21,40 +23,29 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      # Build the project with Maven
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
-      - name: Deploy to EC2 Tomcat  # Deploy using Tomcat Manager: use your credentials in secrets
+      # Deploy the WAR file to Tomcat on EC2
+      - name: Deploy to EC2 Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          PEM_KEY: ${{ secrets.PEM_KEY }}
         run: |
-          set -e
-          CONTEXT_PATH="/myapp"
+          # Save PEM key to a file
+          echo "${{ secrets.PEM_KEY }}" > ec2-key.pem
+          chmod 600 ec2-key.pem
 
-          # Install curl
-          sudo apt-get update && sudo apt-get install -y curl
+          # Upload the WAR file to the EC2 instance
+          scp -i ec2-key.pem target/*.war $EC2_USER@$EC2_HOST:/tmp/
 
-          # Undeploy the existing application
-          echo "Undeploying existing application..."
-          curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No existing deployment to undeploy"
+          # SSH into the EC2 instance to deploy the WAR
+          ssh -i ec2-key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            sudo mv /tmp/*.war /opt/tomcat/webapps/
+            sudo systemctl restart tomcat
+          EOF
 
-          # Get the built WAR file
-          WAR_FILE=$(ls target/*.war)
-          if [ ! -f "$WAR_FILE" ]; then
-            echo "WAR file not found. Build might have failed."
-            exit 1
-          fi
-          echo "Deploying WAR file: $WAR_FILE"
-
-          # Deploy the new WAR file
-          curl -v --fail --upload-file "$WAR_FILE" \
-            "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
-
-          # Validate deployment
-          echo "Validating deployment..."
-          curl -v --fail "$TOMCAT_URL$CONTEXT_PATH" || echo "Validation failed"
-          echo "Deployment completed successfully."
+          # Clean up the PEM key
+          rm -f ec2-key.pem
