@@ -23,9 +23,20 @@ jobs:
     
     - name: Build with Maven
       run: mvn -B clean package --file pom.xml
-      
-    - name: Upload WAR artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: webapp
-        path: target/*.war
+
+    - name: deploy to ec2-tomcat
+      env:
+        TOMCAT_HOST: ${{ secrets.TOMCAT_HOST }}
+        TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+        TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+		run: |
+        # Install curl if not present
+        sudo apt-get update && sudo apt-get install -y curl
+
+        # Get the built WAR file
+        WAR_FILE=$(ls target/*.war)
+        
+        # Deploy using Tomcat Manager
+        curl --upload-file "$WAR_FILE" \
+          "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true" \  # Fixed: Added `/manager/text` (required path)
+          --user "$TOMCAT_USER:$TOMCAT_PASSWORD"  # Fixed: Used correct var name
