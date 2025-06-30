@@ -24,29 +24,26 @@ jobs:
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
-      - name: Deploy to EC2 Tomcat
+      - name: Deploy to Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}   # e.g. http://18.60.47.20:8080
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # e.g. tirup tomcat username
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # e.g. ullitirup@123 tomcat password
+          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
         run: |
           # Install curl if not present
           sudo apt-get update && sudo apt-get install -y curl
           
-          # Application context path
+          # Define the context path
           CONTEXT_PATH="/myapp"
-          
-          # Undeploy existing application
+
+          # Undeploy the existing application
           echo "Undeploying existing application..."
           curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No existing deployment to undeploy"
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No previous deployment to remove."
 
-          # Get the built WAR file
-          WAR_FILE=$(ls target/*.war)
-          
           # Deploy the new WAR file
-          echo "Deploying new application..."
+          WAR_FILE=$(ls target/*.war)
+          echo "Deploying new WAR file..."
           curl -v --fail --upload-file "$WAR_FILE" \
             "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
             --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
-          echo "Deployment completed successfully."
