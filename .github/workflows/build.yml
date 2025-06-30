@@ -33,10 +33,14 @@ jobs:
           # Install curl if not present
           sudo apt-get update && sudo apt-get install -y curl
 
-          # Get the built WAR file
-          WAR_FILE=$(ls target/*.war)
-          
-          # Deploy using Tomcat Manager
-          curl -v --fail --upload-file "$WAR_FILE" \
-            "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+          # 1. Get WAR file
+    WAR_FILE=$(ls target/*.war)
+    
+    # 2. Force redeploy with verbose output
+    curl -v --fail --upload-file "$WAR_FILE" \
+      "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true" \
+      --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+    
+    # 3. Content verification
+    curl -s "$TOMCAT_URL/myapp/" | grep -q "Hello New Version" || \
+      (echo "Deployed content doesn't match!" && exit 1)
