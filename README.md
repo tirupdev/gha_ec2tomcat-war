@@ -1,7 +1,7 @@
-Repository: tirupdev/gt1  (snapshot on 2025-06-30 04:34:12 )
+https://github.com/tirupdev/gha_ec2tomcat-war
 
 .
-├── pom.xml
+├── pom.xml   # define wa/jar, 
 ├── .github/
 │   └── workflows/
 │       └── build.yml
@@ -13,7 +13,7 @@ Repository: tirupdev/gt1  (snapshot on 2025-06-30 04:34:12 )
         │           ├── SimpleBean.java
         │           └── HelloServlet.java
         └── webapp/
-            └── index.jsp
+            └── index.jsp  # output page
 
 ======================================================================
 File: pom.xml
@@ -66,58 +66,57 @@ File: pom.xml
 ======================================================================
 File: .github/workflows/build.yml
 ======================================================================
-name: Build WAR Package and Deploy to Tomcat
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+# purely on tomcat hos, user, password only
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+steps:
+  - name: Checkout code
+    uses: actions/checkout@v4
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  - name: Set up JDK 17
+    uses: actions/setup-java@v3
+    with:
+      java-version: '17'
+      distribution: 'temurin'
+      cache: 'maven'
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
+  - name: Build with Maven
+    run: mvn -B clean package --file pom.xml
 
-      - name: Build with Maven
-        run: mvn -B clean package --file pom.xml
+  - name: Deploy to Tomcat
+    env:
+      TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
+      TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+      TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+    run: |
+      # Install curl if not present
+      sudo apt-get update && sudo apt-get install -y curl
+      
+      # Define the context path
+      CONTEXT_PATH="/myapp"
 
-      - name: Deploy to EC2 Tomcat # set your credentials in secrets
-        env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}   # e.g. http://18.60.47.20:8080 tomcat url
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # e.g. tirup tomcat username
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # e.g. ullitirup@123 tomcat password
-        run: |
-          # Install curl if not present
-          sudo apt-get update && sudo apt-get install -y curl
-          # Get the built WAR file
-          WAR_FILE=$(ls target/*.war)
-          # Deploy using Tomcat Manager
-          curl -v --fail --upload-file "$WAR_FILE"                     
-          "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true"                    
-           --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+      # Undeploy the existing application
+      echo "Undeploying existing application..."
+      curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
+        --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No previous deployment to remove."
 
-alternatively try this 
+      # Deploy the new WAR file
+      WAR_FILE=$(ls target/*.war)
+      echo "Deploying new WAR file..."
+      curl -v --fail --upload-file "$WAR_FILE" \
+        "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
+        --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+
+
 ======================================================================
 File: .github/workflows/build.yml
 ======================================================================
+## purely using ec2_user(ubuntu), ec2_host(ec2 pip), ec2 pem file(pem key)
 
-name: Build WAR Package and Deploy to Tomcat
+name: Build and Deploy to EC2 Tomcat
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 
 jobs:
@@ -125,42 +124,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Set up Java environment
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'maven'
 
+      # Build the WAR file
       - name: Build with Maven
-        run: mvn -B clean package --file pom.xml
+        run: mvn clean package
 
-      - name: Deploy to Tomcat
+      # Deploy the WAR file to EC2 Tomcat
+      - name: Deploy to EC2 Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          PEM_KEY: ${{ secrets.PEM_KEY }}
         run: |
-          # Install curl if not present
-          sudo apt-get update && sudo apt-get install -y curl
-          
-          # Define the context path
-          CONTEXT_PATH="/myapp"
+          # Save PEM key to a file
+          echo "${{ secrets.PEM_KEY }}" > ec2-key.pem
+          chmod 600 ec2-key.pem
 
-          # Undeploy the existing application
-          echo "Undeploying existing application..."
-          curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No previous deployment to remove."
+          # Ensure the .ssh directory exists
+          mkdir -p ~/.ssh
 
-          # Deploy the new WAR file
-          WAR_FILE=$(ls target/*.war)
-          echo "Deploying new WAR file..."
-          curl -v --fail --upload-file "$WAR_FILE" \
-            "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
-            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+          # Add EC2 host to known_hosts
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+          # Upload the WAR file
+          scp -i ec2-key.pem target/*.war $EC2_USER@$EC2_HOST:/tmp/
+
+          # SSH into EC2 to deploy the WAR
+          ssh -i ec2-key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            sudo mv /tmp/*.war /opt/tomcat/webapps/
+            sudo systemctl restart tomcat
+          EOF
+
+          # Clean up the PEM key
+          rm -f ec2-key.pem
+
 
 ======================================================================
 File: src/main/java/com/example/SimpleBean.java
@@ -231,4 +238,5 @@ File: src/main/webapp/index.jsp
     <p>Server: <%= application.getServerInfo() %></p>
 </body>
 </html>
+
 
