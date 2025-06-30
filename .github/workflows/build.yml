@@ -24,17 +24,37 @@ jobs:
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
-      - name: Deploy to EC2 Tomcat # set your credentials in secrets
+      - name: Deploy to EC2 Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}   # e.g. http://18.60.47.20:8080 tomcat url
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # e.g. tirup tomcat username
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # e.g. ullitirup@123 tomcat password
+          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
         run: |
-          # Install curl if not present
+          set -e
+          CONTEXT_PATH="/myapp"
+
+          # Install curl
           sudo apt-get update && sudo apt-get install -y curl
+
+          # Undeploy the existing application
+          echo "Undeploying existing application..."
+          curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No existing deployment to undeploy"
+
           # Get the built WAR file
           WAR_FILE=$(ls target/*.war)
-          # Deploy using Tomcat Manager
-          curl -v --fail --upload-file "$WAR_FILE"                     
-          "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true"                    
-           --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+          if [ ! -f "$WAR_FILE" ]; then
+            echo "WAR file not found. Build might have failed."
+            exit 1
+          fi
+          echo "Deploying WAR file: $WAR_FILE"
+
+          # Deploy the new WAR file
+          curl -v --fail --upload-file "$WAR_FILE" \
+            "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
+
+          # Validate deployment
+          echo "Validating deployment..."
+          curl -v --fail "$TOMCAT_URL$CONTEXT_PATH" || echo "Validation failed"
+          echo "Deployment completed successfully."
