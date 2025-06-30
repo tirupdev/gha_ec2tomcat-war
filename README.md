@@ -107,6 +107,60 @@ jobs:
           "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true"                    
            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
 
+alternatively try this 
+======================================================================
+File: .github/workflows/build.yml
+======================================================================
+
+name: Build WAR Package and Deploy to Tomcat
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn -B clean package --file pom.xml
+
+      - name: Deploy to Tomcat
+        env:
+          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+        run: |
+          # Install curl if not present
+          sudo apt-get update && sudo apt-get install -y curl
+          
+          # Define the context path
+          CONTEXT_PATH="/myapp"
+
+          # Undeploy the existing application
+          echo "Undeploying existing application..."
+          curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No previous deployment to remove."
+
+          # Deploy the new WAR file
+          WAR_FILE=$(ls target/*.war)
+          echo "Deploying new WAR file..."
+          curl -v --fail --upload-file "$WAR_FILE" \
+            "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
 
 ======================================================================
 File: src/main/java/com/example/SimpleBean.java
