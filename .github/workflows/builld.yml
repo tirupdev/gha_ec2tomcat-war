@@ -25,7 +25,7 @@ jobs:
       run: mvn -B clean package --file pom.xml
       
     - name: Upload WAR artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: webapp
         path: target/*.war
