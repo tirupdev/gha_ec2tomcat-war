@@ -24,8 +24,8 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
-      # Deploy WAR to EC2 Tomcat
-      - name: Deploy to EC2 Tomcat 
+      # Deploy the WAR file to EC2 Tomcat
+      - name: Deploy to EC2 Tomcat
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -34,6 +34,9 @@ jobs:
           # Save PEM key to a file
           echo "${{ secrets.PEM_KEY }}" > ec2-key.pem
           chmod 600 ec2-key.pem
+
+          # Ensure the .ssh directory exists
+          mkdir -p ~/.ssh
 
           # Add EC2 host to known_hosts
           ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
