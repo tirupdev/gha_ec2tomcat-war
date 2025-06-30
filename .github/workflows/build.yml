@@ -24,7 +24,7 @@ jobs:
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
-      - name: Deploy to EC2 Tomcat
+      - name: Deploy to EC2 Tomcat  # Deploy using Tomcat Manager: use your credentials in secrets
         env:
           TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
           TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
