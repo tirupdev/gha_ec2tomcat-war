@@ -26,9 +26,9 @@ jobs:
 
       - name: Deploy to EC2 Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASS }}
+          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}  # URL of the Tomcat Manager:http://18.60.47.20:8080
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # Tomcat Manager username:tirup
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # Tomcat Manager password:ullitirup@123
         run: |
           # Install curl if not present
           sudo apt-get update && sudo apt-get install -y curl
@@ -37,6 +37,6 @@ jobs:
           WAR_FILE=$(ls target/*.war)
           
           # Deploy using Tomcat Manager
-          curl --upload-file "$WAR_FILE" \
+          curl -v --fail --upload-file "$WAR_FILE" \
             "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true" \
-            --user "$TOMCAT_USER:$TOMCAT_PASS"
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
