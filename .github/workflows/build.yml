@@ -24,30 +24,31 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
+      # Deploy the WAR file to EC2 Tomcat
       - name: Deploy to EC2 Tomcat
-  env:
-    EC2_USER: ${{ secrets.EC2_USER }}
-    EC2_HOST: ${{ secrets.EC2_HOST }}
-    PEM_KEY: ${{ secrets.PEM_KEY }}
-  run: |
-    # Save PEM key to a file
-    echo "${{ secrets.PEM_KEY }}" > ec2-key.pem
-    chmod 600 ec2-key.pem
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          PEM_KEY: ${{ secrets.PEM_KEY }}
+        run: |
+          # Save PEM key to a file
+          echo "${{ secrets.PEM_KEY }}" > ec2-key.pem
+          chmod 600 ec2-key.pem
 
-    # Ensure the .ssh directory exists
-    mkdir -p ~/.ssh
+          # Ensure the .ssh directory exists
+          mkdir -p ~/.ssh
 
-    # Add EC2 host to known_hosts
-    ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+          # Add EC2 host to known_hosts
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-    # Upload the WAR file
-    scp -i ec2-key.pem target/*.war $EC2_USER@$EC2_HOST:/tmp/
+          # Upload the WAR file
+          scp -i ec2-key.pem target/*.war $EC2_USER@$EC2_HOST:/tmp/
 
-    # SSH into EC2 to deploy the WAR
-    ssh -i ec2-key.pem $EC2_USER@$EC2_HOST << 'EOF'
-      sudo mv /tmp/*.war /opt/tomcat/webapps/
-      sudo systemctl restart tomcat
-    EOF
+          # SSH into EC2 to deploy the WAR
+          ssh -i ec2-key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            sudo mv /tmp/*.war /opt/tomcat/webapps/
+            sudo systemctl restart tomcat
+          EOF
 
-    # Clean up the PEM key
-    rm -f ec2-key.pem
+          # Clean up the PEM key
+          rm -f ec2-key.pem
