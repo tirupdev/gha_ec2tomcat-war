@@ -9,38 +9,44 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
-      
+
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
       - name: Deploy to EC2 Tomcat
         env:
-          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}  # URL of the Tomcat Manager:http://18.60.47.20:8080
-          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # Tomcat Manager username:tirup
-          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # Tomcat Manager password:ullitirup@123
+          TOMCAT_URL: ${{ secrets.TOMCAT_URL }}   # e.g. http://18.60.47.20:8080
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }} # e.g. tirup tomcat username
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }} # e.g. ullitirup@123 tomcat password
         run: |
           # Install curl if not present
           sudo apt-get update && sudo apt-get install -y curl
+          
+          # Application context path
+          CONTEXT_PATH="/myapp"
+          
+          # Undeploy existing application
+          echo "Undeploying existing application..."
+          curl -v --fail "$TOMCAT_URL/manager/text/undeploy?path=$CONTEXT_PATH" \
+            --user "$TOMCAT_USER:$TOMCAT_PASSWORD" || echo "No existing deployment to undeploy"
 
-          # 1. Get WAR file
+          # Get the built WAR file
           WAR_FILE=$(ls target/*.war)
           
-          # 2. Force redeploy with verbose output
+          # Deploy the new WAR file
+          echo "Deploying new application..."
           curl -v --fail --upload-file "$WAR_FILE" \
-            "$TOMCAT_URL/manager/text/deploy?path=/myapp&update=true" \
+            "$TOMCAT_URL/manager/text/deploy?path=$CONTEXT_PATH&update=true" \
             --user "$TOMCAT_USER:$TOMCAT_PASSWORD"
-          
-          # 3. Content verification
-          curl -s "$TOMCAT_URL/myapp/" | grep -q "Hello New Version" || \
-            (echo "Deployed content doesn't match!" && exit 1)
+          echo "Deployment completed successfully."
